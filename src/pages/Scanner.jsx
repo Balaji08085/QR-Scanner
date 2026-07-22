@@ -18,8 +18,10 @@ const Scanner = () => {
 
   // Real Camera & Scanner state
   const videoRef = useRef(null);
+  const streamRef = useRef(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraStatus, setCameraStatus] = useState('Initializing scanner...');
+  const [usingFrontCamera, setUsingFrontCamera] = useState(false);
 
   const fileInputRef = useRef(null);
 
@@ -30,38 +32,73 @@ const Scanner = () => {
   const laserDirRef = useRef(1);
 
   // Start Real Mobile/Desktop Camera Feed
-  const startCamera = async () => {
+  const startCamera = async (forceFront = false) => {
     try {
       setCameraStatus('Requesting camera permission...');
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { 
-          facingMode: { ideal: 'environment' }, 
-          width: { ideal: 1280 }, 
-          height: { ideal: 720 } 
-        }
-      });
+
+      // Stop any existing stream first
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
+      }
+
+      const facingMode = forceFront ? 'user' : 'environment';
+
+      // Try exact rear camera first (mobile), then fallback to ideal
+      let stream = null;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { exact: facingMode },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          }
+        });
+      } catch {
+        // exact failed (e.g. desktop with one camera) — try ideal
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: facingMode },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          }
+        });
+      }
+
+      streamRef.current = stream;
+      setUsingFrontCamera(forceFront);
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
         setCameraActive(true);
-        setCameraStatus('Live Camera Feed Active — Point at QR Pass');
+        setCameraStatus(
+          forceFront
+            ? 'Front Camera Active'
+            : 'Rear Camera Active — Point at QR Pass'
+        );
       }
     } catch (err) {
-      console.warn("Live camera unavailable or permission denied", err);
+      console.warn('Live camera unavailable or permission denied', err);
       setCameraActive(false);
-      setCameraStatus('Simulator Active (Camera blocked/unavailable)');
+      setCameraStatus('Camera blocked — Upload QR photo instead');
     }
   };
 
   const stopCamera = () => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      const stream = videoRef.current.srcObject;
-      stream.getTracks().forEach(track => track.stop());
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
     setCameraActive(false);
     setCameraStatus('Camera Stopped');
+  };
+
+  const toggleCamera = () => {
+    startCamera(!usingFrontCamera);
   };
 
   useEffect(() => {
@@ -125,7 +162,7 @@ const Scanner = () => {
     };
   }, [cameraActive, result, scanning]);
 
-  // Snap live camera frame or fallback to active verification
+  // Snap live camera frame and decode QR
   const handleSnapAndVerify = () => {
     const video = videoRef.current;
     if (video && video.videoWidth > 0 && video.videoHeight > 0) {
@@ -143,9 +180,11 @@ const Scanner = () => {
         handleScanTrigger(code.data.trim());
         return;
       }
+      // No QR detected — prompt user
+      setCameraStatus('⚠️ No QR code detected — hold steady & try again');
+    } else {
+      setCameraStatus('⚠️ Camera not ready');
     }
-    // Instant gate verification check for active QR pass
-    handleScanTrigger('TN 14 AE 5777');
   };
 
   // Handle image file upload QR decoding with dual-engine fallback
@@ -566,12 +605,22 @@ const Scanner = () => {
 
               {/* Camera Status & Control Pill */}
               <div className="absolute top-3 right-3 z-20 flex items-center gap-2">
+                {/* Flip camera button (only shown when camera is active) */}
+                {cameraActive && (
+                  <button
+                    onClick={toggleCamera}
+                    title={usingFrontCamera ? 'Switch to Rear Camera' : 'Switch to Front Camera'}
+                    className="p-1.5 rounded-full bg-slate-900/90 backdrop-blur-md border border-white/20 text-white hover:bg-slate-800 shadow-lg"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
+                  </button>
+                )}
                 <button 
-                  onClick={cameraActive ? stopCamera : startCamera}
+                  onClick={cameraActive ? stopCamera : () => startCamera(false)}
                   className="px-3 py-1.5 rounded-full bg-slate-900/90 backdrop-blur-md text-[10px] font-bold text-white border border-white/20 flex items-center gap-1.5 hover:bg-slate-800 shadow-lg"
                 >
                   {cameraActive ? <Video className="w-3.5 h-3.5 text-emerald-400" /> : <VideoOff className="w-3.5 h-3.5 text-amber-400" />}
-                  {cameraActive ? 'Camera Active' : 'Start Camera'}
+                  {cameraActive ? (usingFrontCamera ? 'Front Cam' : 'Rear Cam') : 'Start Camera'}
                 </button>
               </div>
 
