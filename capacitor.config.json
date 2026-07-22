@@ -1,0 +1,14 @@
+{
+  "appId": "com.mccmrf.smartaccess",
+  "appName": "MCC MRF Smart Access",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "CapacitorCookies": {
+      "enabled": true
+    }
+  }
+}
