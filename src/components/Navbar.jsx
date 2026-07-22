@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ShieldCheck, Scan, Car, Search, History, BarChart3, LogIn, Menu, X, GraduationCap, Shield } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useEntry } from '../context/EntryContext';
-import MccLogo from './MccLogo';
+import SvacsLogo from './SvacsLogo';
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -27,9 +27,9 @@ const Navbar = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-20">
           
-          {/* MCC MRF Logo & Brand */}
+          {/* SVACS Logo & Brand */}
           <Link to={userRole === 'student' ? "/search" : "/dashboard"} className="flex items-center gap-3 shrink-0 group">
-            <MccLogo showText={true} />
+            <SvacsLogo showText={true} size={40} />
           </Link>
 
           {/* Desktop Navigation Links */}
