@@ -33,43 +33,56 @@ const Scanner = () => {
 
   // Start Real Mobile/Desktop Camera Feed
   const startCamera = async (forceFront = false) => {
-    try {
-      setCameraStatus('Requesting camera permission...');
+    setCameraStatus('Requesting camera permission...');
 
-      // Stop any existing stream first
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(t => t.stop());
-        streamRef.current = null;
-      }
+    // Stop any existing stream first
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
 
-      const facingMode = forceFront ? 'user' : 'environment';
+    const facingMode = forceFront ? 'user' : 'environment';
 
-      // Try exact rear camera first (mobile), then fallback to ideal
-      let stream = null;
+    // Multi-fallback strategy for maximum WebView/mobile compatibility:
+    // 1. Exact environment (best for mobile)
+    // 2. Ideal environment (most browsers)
+    // 3. Any video without facing preference (old WebViews)
+    // 4. Plain video: true (last resort)
+    const constraints = [
+      { video: { facingMode: { exact: facingMode }, width: { ideal: 1280 }, height: { ideal: 720 } } },
+      { video: { facingMode: { ideal: facingMode }, width: { ideal: 1280 }, height: { ideal: 720 } } },
+      { video: { facingMode: { ideal: facingMode } } },
+      { video: true },
+    ];
+
+    let stream = null;
+    let lastErr = null;
+
+    for (const constraint of constraints) {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { exact: facingMode },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          }
-        });
-      } catch {
-        // exact failed (e.g. desktop with one camera) — try ideal
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: facingMode },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          }
-        });
+        stream = await navigator.mediaDevices.getUserMedia(constraint);
+        break; // success
+      } catch (err) {
+        lastErr = err;
+        console.warn('Camera constraint failed, trying next:', constraint, err.message);
       }
+    }
 
-      streamRef.current = stream;
-      setUsingFrontCamera(forceFront);
+    if (!stream) {
+      console.error('All camera constraints failed:', lastErr);
+      setCameraActive(false);
+      setCameraStatus('⚠️ Camera permission denied — allow camera access in your browser settings');
+      return;
+    }
 
+    streamRef.current = stream;
+    setUsingFrontCamera(forceFront);
+
+    try {
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        videoRef.current.setAttribute('playsinline', 'true');
+        videoRef.current.setAttribute('muted', 'true');
         await videoRef.current.play();
         setCameraActive(true);
         setCameraStatus(
@@ -78,10 +91,10 @@ const Scanner = () => {
             : 'Rear Camera Active — Point at QR Pass'
         );
       }
-    } catch (err) {
-      console.warn('Live camera unavailable or permission denied', err);
+    } catch (playErr) {
+      console.warn('Video play failed:', playErr);
       setCameraActive(false);
-      setCameraStatus('Camera blocked — Upload QR photo instead');
+      setCameraStatus('⚠️ Camera started but video failed to play');
     }
   };
 
